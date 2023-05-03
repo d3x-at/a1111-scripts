@@ -1,5 +1,7 @@
 aiohttp
-# for img2img and interrogate
-Pillow
+# for txt2img_simple
+requests
 # for img2img
 sd-parsers
+# for img2img and interrogate
+Pillow
