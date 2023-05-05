@@ -1,6 +1,10 @@
 '''
 usage: python3 interrogate.py <directory> <glob pattern>
 i.e.: python3 interrogate.py images **/*.png
+
+puts out <original_filename>.txt next to the original file
+
+add more servers to SERVERS to process stuff in parallel
 '''
 import asyncio
 import base64
@@ -9,44 +13,45 @@ import sys
 from io import BytesIO
 from pathlib import Path
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from PIL import Image
 
 SERVERS = ["http://127.0.0.1:7860"]
 
+MODEL = "clip"
 
-async def worker(server_address, queue, model: str = "clip"):
-    async with ClientSession(server_address) as session:
+session_timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
+queue = asyncio.Queue()
+
+
+async def worker(server_address, queue):
+    async with ClientSession(server_address, timeout=session_timeout) as session:
         while True:
-            image_filename = await queue.get()
+            filename = await queue.get()
             try:
-                await interrogate_file(image_filename, model, session)
+                output_filename = filename.with_suffix('.txt')
+                if output_filename.exists():
+                    raise ValueError("file already exists", output_filename)
+
+                payload = get_payload(filename)
+                caption = await interrogate(payload, session)
+                save_output(caption, output_filename)
             except RuntimeError:
-                logging.warning("error interrogating file: %s", image_filename)
+                logging.exception("error interrogating file: %s", filename)
             except Exception:
                 logging.exception("unexpected error")
             queue.task_done()
 
 
-async def interrogate_file(filename: Path, model: str, session: ClientSession):
-    output_file = filename.with_suffix('.txt')
-    if output_file.exists():
-        raise RuntimeError("file already exists", filename)
-
-    payload = get_payload(filename, model)
-
+async def interrogate(payload: dict, session: ClientSession):
     async with session.post('/sdapi/v1/interrogate', json=payload) as response:
         if not response.ok:
             raise RuntimeError("error querying server", response.status, await response.text())
-        caption = (await response.json()).get('caption')
-
-    if not caption:
-        raise RuntimeError('caption is empty')
-
-    write_file_caption(caption, output_file)
+        result = await response.json()
+    return result['caption']
 
 
-def get_payload(image_filename: Path, model: str):
+def get_payload(image_filename: Path):
     with Image.open(image_filename) as image, BytesIO() as buffered:
         mime_type = image.get_format_mimetype()
         image.save(buffered, format=image.format)
@@ -54,24 +59,25 @@ def get_payload(image_filename: Path, model: str):
 
     return {
         "image": f"data:{mime_type};base64,{base64_image}",
-        "model": model
+        "model": MODEL
     }
 
 
-def write_file_caption(caption: str, file_path: Path):
+def save_output(caption: str, file_path: Path):
     with open(file_path, 'w', encoding='utf-8') as fp:
         fp.write(caption)
 
 
-async def main(directory, glob_pattern):
+def add_files(directory, glob_pattern):
     dir_path = Path(directory)
     if not dir_path.exists():
         raise ValueError("directory does not exist")
 
-    queue = asyncio.Queue()
     for filename in dir_path.glob(glob_pattern):
         queue.put_nowait(filename)
 
+
+async def run():
     tasks = []
     for server_address in SERVERS:
         task = asyncio.create_task(worker(server_address, queue))
@@ -81,7 +87,13 @@ async def main(directory, glob_pattern):
 
     for task in tasks:
         task.cancel()
+
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def main(directory, glob_pattern):
+    add_files(directory, glob_pattern)
+    await run()
 
 
 if __name__ == "__main__":

@@ -24,7 +24,8 @@ async def worker(server_address, queue):
         while True:
             payload = await queue.get()
             try:
-                await request_image_generation(payload, session)
+                for base64_image in await txt2img(payload, session):
+                    save_output(base64_image)
             except RuntimeError:
                 logging.exception("error generating image")
             except Exception:
@@ -32,13 +33,12 @@ async def worker(server_address, queue):
             queue.task_done()
 
 
-async def request_image_generation(payload: dict, session: ClientSession):
+async def txt2img(payload: dict, session: ClientSession):
     async with session.post('/sdapi/v1/txt2img', json=payload) as response:
         if not response.ok:
             raise RuntimeError("error querying server", response.status, await response.text())
-        r = await response.json()
-    for image in r.get('images', []):
-        save_output(image)
+        result = await response.json()
+    return result['images']
 
 
 def save_output(base64_image: str):

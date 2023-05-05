@@ -14,7 +14,7 @@ import sys
 from io import BytesIO
 from pathlib import Path
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from PIL import Image
 from sdparsers import ParserManager
 
@@ -22,40 +22,39 @@ SERVERS = ["http://127.0.0.1:7860"]
 
 PAYLOAD = {
     "steps": 5,
-    "denoising_strength": 0.2,
-    "width": 384
+    "denoising_strength": 0.2
 }
 
+session_timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
 queue = asyncio.Queue()
 parser = ParserManager()
 
 
 async def worker(server_address, queue):
-    async with ClientSession(server_address) as session:
+    async with ClientSession(server_address, timeout=session_timeout) as session:
         while True:
-            image_filename = await queue.get()
+            filename = await queue.get()
             try:
-                await request_img2img(image_filename, session)
+                output_filename = filename.with_stem(filename.stem + "_img2img")
+                if output_filename.exists():
+                    raise ValueError("file already exists", output_filename)
+
+                payload = get_payload(filename)
+                images = await img2img(payload, session)
+                save_output(images[0], output_filename)
             except RuntimeError:
-                logging.exception("error interrogating file: %s", image_filename)
+                logging.exception("error interrogating file: %s", filename)
             except Exception:
                 logging.exception("unexpected error")
             queue.task_done()
 
 
-async def request_img2img(filename: Path, session: ClientSession):
-    output_filename = filename.with_stem(filename.stem + "_img2img")
-    if output_filename.exists():
-        raise RuntimeError("file already exists", output_filename)
-
-    payload = get_payload(filename)
-
+async def img2img(payload: dict, session: ClientSession):
     async with session.post('/sdapi/v1/img2img', json=payload) as response:
         if not response.ok:
             raise RuntimeError("error querying server", response.status, await response.text())
-        r = await response.json()
-
-    save_output(r.get('images')[0], output_filename)
+        result = await response.json()
+    return result['images']
 
 
 def get_payload(image_filename: Path):
@@ -64,8 +63,11 @@ def get_payload(image_filename: Path):
         mime_type = image.get_format_mimetype()
         image.save(buffered, format=image.format)
         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        payload = {
+            'height': image.height,
+            'width': image.width
+        }
 
-    payload = {}
     try:
         prompt, negative_prompt = image_parameters.prompts[0]
         if prompt:
