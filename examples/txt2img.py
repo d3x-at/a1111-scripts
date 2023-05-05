@@ -7,6 +7,7 @@ import logging
 from itertools import count
 from pathlib import Path
 
+from aiofiles import open, ospath
 from aiohttp import ClientSession, ClientTimeout
 
 OUTPUT_FOLDER = "tmp"
@@ -25,7 +26,7 @@ async def worker(server_address, queue):
             payload = await queue.get()
             try:
                 for base64_image in await txt2img(payload, session):
-                    save_output(base64_image)
+                    await save_output(base64_image)
             except RuntimeError:
                 logging.exception("error generating image")
             except Exception:
@@ -41,14 +42,14 @@ async def txt2img(payload: dict, session: ClientSession):
     return result['images']
 
 
-def save_output(base64_image: str):
+async def save_output(base64_image: str):
     image_bytes = base64.b64decode(base64_image)
     output_filename = get_filename(image_bytes)
-    with open(output_filename, 'wb') as fp:
-        fp.write(image_bytes)
+    async with open(output_filename, 'wb') as fp:
+        await fp.write(image_bytes)
 
 
-def get_filename(image_bytes: bytes):
+async def get_filename(image_bytes: bytes):
 
     if image_bytes.startswith(JPG_SIG):
         extension = ".jpg"
@@ -60,7 +61,7 @@ def get_filename(image_bytes: bytes):
     output_folder = Path(OUTPUT_FOLDER)
     for i in count():
         filename = output_folder / f"{i:08d}{extension}"
-        if not filename.exists():
+        if not await ospath.exists(filename):
             return filename
 
 

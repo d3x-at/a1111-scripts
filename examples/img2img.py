@@ -14,6 +14,7 @@ import sys
 from io import BytesIO
 from pathlib import Path
 
+from aiofiles import open, ospath
 from aiohttp import ClientSession, ClientTimeout
 from PIL import Image
 from sdparsers import ParserManager
@@ -36,12 +37,12 @@ async def worker(server_address, queue):
             filename = await queue.get()
             try:
                 output_filename = filename.with_stem(filename.stem + "_img2img")
-                if output_filename.exists():
+                if await ospath.exists(output_filename):
                     raise ValueError("file already exists", output_filename)
 
-                payload = get_payload(filename)
+                payload = await get_payload(filename)
                 images = await img2img(payload, session)
-                save_output(images[0], output_filename)
+                await save_output(images[0], output_filename)
             except RuntimeError:
                 logging.exception("error interrogating file: %s", filename)
             except Exception:
@@ -57,31 +58,31 @@ async def img2img(payload: dict, session: ClientSession):
     return result['images']
 
 
-def get_payload(image_filename: Path):
-    with Image.open(image_filename) as image, BytesIO() as buffered:
-        image_parameters = parser.parse(image)
-        mime_type = image.get_format_mimetype()
-        image.save(buffered, format=image.format)
-        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        payload = {
-            'height': image.height,
-            'width': image.width
-        }
+async def get_payload(image_filename: Path):
+    async with open(image_filename, mode='rb') as fp:
+        with BytesIO(await fp.read()) as buffered, Image.open(buffered) as image:
+            base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            image_parameters = parser.parse(image)
+            mime_type = image.get_format_mimetype()
+            payload = {
+                'height': image.height,
+                'width': image.width
+            }
 
-    try:
-        prompt, negative_prompt = image_parameters.prompts[0]
-        if prompt:
-            payload['prompt'] = prompt.value
-        if negative_prompt:
-            payload['negative_prompt'] = negative_prompt.value
-    except KeyError:
-        logging.warning("no prompt found in %s", image_filename)
-
-    try:
-        sampler = image_parameters.samplers[0]
-        payload.update(sampler.parameters, sampler_index=sampler.name)
-    except KeyError:
-        logging.warning("no sampler found in %s", image_filename)
+    if image_parameters:
+        try:
+            prompt, negative_prompt = image_parameters.prompts[0]
+            if prompt:
+                payload['prompt'] = prompt.value
+            if negative_prompt:
+                payload['negative_prompt'] = negative_prompt.value
+        except KeyError:
+            logging.warning("no prompt found in %s", image_filename)
+        try:
+            sampler = image_parameters.samplers[0]
+            payload.update(sampler.parameters, sampler_index=sampler.name)
+        except KeyError:
+            logging.warning("no sampler found in %s", image_filename)
 
     return {
         **payload,
@@ -90,10 +91,10 @@ def get_payload(image_filename: Path):
     }
 
 
-def save_output(base64_image: str, filename: Path):
+async def save_output(base64_image: str, filename: Path):
     image_bytes = base64.b64decode(base64_image)
-    with open(filename, 'wb') as fp:
-        fp.write(image_bytes)
+    async with open(filename, 'wb') as fp:
+        await fp.write(image_bytes)
 
 
 def add_files(directory, glob_pattern):

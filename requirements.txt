@@ -1,4 +1,5 @@
 aiohttp
+aiofiles
 # for txt2img_simple
 requests
 # for img2img

@@ -10,11 +10,10 @@ import asyncio
 import base64
 import logging
 import sys
-from io import BytesIO
 from pathlib import Path
 
+from aiofiles import open, ospath
 from aiohttp import ClientSession, ClientTimeout
-from PIL import Image
 
 SERVERS = ["http://127.0.0.1:7860"]
 
@@ -30,12 +29,12 @@ async def worker(server_address, queue):
             filename = await queue.get()
             try:
                 output_filename = filename.with_suffix('.txt')
-                if output_filename.exists():
+                if await ospath.exists(output_filename):
                     raise ValueError("file already exists", output_filename)
 
-                payload = get_payload(filename)
+                payload = await get_payload(filename)
                 caption = await interrogate(payload, session)
-                save_output(caption, output_filename)
+                await save_output(caption, output_filename)
             except RuntimeError:
                 logging.exception("error interrogating file: %s", filename)
             except Exception:
@@ -51,21 +50,19 @@ async def interrogate(payload: dict, session: ClientSession):
     return result['caption']
 
 
-def get_payload(image_filename: Path):
-    with Image.open(image_filename) as image, BytesIO() as buffered:
-        mime_type = image.get_format_mimetype()
-        image.save(buffered, format=image.format)
-        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+async def get_payload(image_filename: Path):
+    async with open(image_filename, mode='rb') as fp:
+        base64_image = base64.b64encode(await fp.read()).decode('utf-8')
 
     return {
-        "image": f"data:{mime_type};base64,{base64_image}",
+        "image": base64_image,
         "model": MODEL
     }
 
 
-def save_output(caption: str, file_path: Path):
-    with open(file_path, 'w', encoding='utf-8') as fp:
-        fp.write(caption)
+async def save_output(caption: str, file_path: Path):
+    async with open(file_path, 'w', encoding='utf-8') as fp:
+        await fp.write(caption)
 
 
 def add_files(directory, glob_pattern):
