@@ -58,7 +58,7 @@ async def img2img(payload: dict, session: ClientSession):
     return result['images']
 
 
-async def get_payload(image_filename: Path):
+async def get_payload(image_filename: Path, custom_payload=PAYLOAD):
     async with open(image_filename, mode='rb') as fp:
         with BytesIO(await fp.read()) as buffered, Image.open(buffered) as image:
             base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -86,7 +86,7 @@ async def get_payload(image_filename: Path):
 
     return {
         **payload,
-        **PAYLOAD,
+        **custom_payload,
         "init_images": [f"data:{mime_type};base64,{base64_image}"]
     }
 
