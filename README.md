@@ -22,3 +22,9 @@ Example scripts:
   Batch Interrogation example, iterates over a list of image files.
 
   Uses multiple backend servers for generation, if given.
+
+* [img2vid.py](examples/img2vid.py)
+
+  Batch Image 2 Image 2 Video, similar to [img2img.py](examples/img2img.py) but creates a video file instead.
+
+  Uses multiple backend servers for generation, if given.

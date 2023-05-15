@@ -6,3 +6,5 @@ requests
 sd-parsers
 # for img2img and interrogate
 Pillow
+# for img2vid
+ffmpeg-python
