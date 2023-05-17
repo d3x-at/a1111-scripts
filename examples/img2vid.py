@@ -20,6 +20,8 @@ import ffmpeg
 import img2img
 from aiohttp import ClientSession, ClientTimeout
 
+img2img.parse_images = False
+
 SERVERS = ["http://127.0.0.1:7860"]
 
 PAYLOAD = {
@@ -64,7 +66,9 @@ queue = asyncio.Queue()
 
 
 async def ffmpeg_worker(ffmpeg_process):
+    '''worker task to pass queued images to the ffmpeg process'''
     async def async_write(process, image: bytes):
+        '''helper function to call process.stdin.write asynchronously'''
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, process.stdin.write, image)
 
@@ -91,14 +95,9 @@ def init_ffmpeg(output_filename: str, overwrite_output: bool = True):
     return out.run_async(pipe_stdin=True)
 
 
-async def get_image(session, filename) -> bytes:
-    payload = await img2img.get_payload(filename, custom_payload=PAYLOAD)
-    images = await img2img.img2img(payload, session)
-    return base64.b64decode(images[0])
-
-
 @contextlib.asynccontextmanager
 async def init_sessions():
+    '''handle the creation and closing of multiple ClientSession objects'''
     sessions = []
     for server_address in SERVERS:
         sessions.append(ClientSession(server_address, timeout=session_timeout))
@@ -109,38 +108,54 @@ async def init_sessions():
         await asyncio.sleep(0)
 
 
+async def get_image(filename, session) -> bytes:
+    '''process image with the img2img API'''
+    # assemble payload
+    payload = await img2img.get_payload(filename, custom_payload=PAYLOAD)
+    # call img2img API
+    images = await img2img.img2img(payload, session)
+    # return image as bytes
+    return base64.b64decode(images[0])
+
+
 async def main(directory, glob_pattern, output_filename):
-    async def collect_tasks():
-        nonlocal tasks
-        images = await asyncio.gather(*tasks, return_exceptions=True)
-        tasks = []
-        for image in images:
-            queue.put_nowait(image)
+    # list of input image files
+    files = list(Path(directory).glob(glob_pattern))
 
-    process = init_ffmpeg(output_filename)
-    ffmpeg_task = asyncio.create_task(ffmpeg_worker(process))
-    tasks = []
+    # start up ffmpeg and ffmpeg helper task
+    ffmpeg_process = init_ffmpeg(output_filename)
+    ffmpeg_task = asyncio.create_task(ffmpeg_worker(ffmpeg_process))
 
+    # use as many concurrent img2img workers as there are SERVERS
     async with init_sessions() as sessions:
         num_sessions = len(sessions)
+        index = 0
 
-        for index, filename in enumerate(Path(directory).glob(glob_pattern)):
-            session = sessions[index % num_sessions]
-            task = asyncio.create_task(get_image(session, filename))
-            tasks.append(task)
+        # loop over files in steps of `num_sessions`
+        while index < len(files):
+            img2img_tasks = [get_image(file, sessions[i])
+                             for i, file in enumerate(files[index:index+num_sessions])]
 
-            if len(tasks) == num_sessions:
-                await collect_tasks()
+            # wait for each img2img batch to finish
+            images = await asyncio.gather(*img2img_tasks, return_exceptions=True)
+            # and put the image into the queue in the same order as they were before
+            for image in images:
+                queue.put_nowait(image)
 
-    if tasks:
-        await collect_tasks()
+            index += num_sessions
 
+    # wait for all files to be processed
     await queue.join()
-    ffmpeg_task.cancel()
-    await asyncio.gather(ffmpeg_task, return_exceptions=True)
 
-    process.stdin.close()
-    process.wait()
+    # shut down ffmpeg and ffmpeg helper task
+    ffmpeg_task.cancel()
+    try:
+        await ffmpeg_task
+    except asyncio.CancelledError:
+        pass
+
+    ffmpeg_process.stdin.close()
+    ffmpeg_process.wait()
 
 
 if __name__ == "__main__":

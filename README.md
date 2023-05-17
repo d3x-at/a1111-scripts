@@ -1,27 +1,40 @@
 Basic scripts to process loads of images using the A1111 API.
 
-Example scripts:
 * [txt2img_simple.py](examples/txt2img_simple.py), [txt2img_simple.js](examples/txt2img_simple.js)
 
-  Basic Text 2 Image example, requests a single image generation.
+  Basic Text 2 Image examples.
+  
+  Request a single image generation.
 
 * [txt2img.py](examples/txt2img.py)
 
-  Batch Text 2 Image example, iterates over a number of given prompts.
+  Batch Text 2 Image example.
   
-  Uses multiple backend servers for generation, if given.
-
-* [img2img.py](examples/img2img.py)
-
-  Batch Image 2 Image example, iterates over a list of image files, injects custom generation parameters.
+  Iterates over a number of given prompts.
   
   Uses multiple backend servers for generation, if given.
 
 * [interrogate.py](examples/interrogate.py)
 
-  Batch Interrogation example, iterates over a list of image files.
+  Batch Interrogation example.
+
+  Iterates over a list of image files, writes text file with interrogated captions.
 
   Uses multiple backend servers for generation, if given.
+
+* [img2img.py](examples/img2img.py)
+
+  Batch Image 2 Image example using the [sd-parsers](https://github.com/d3x-at/sd-parsers) library.
+  
+  Iterates over a list of image files, reuses previous & injects custom generation parameters.
+  
+  Uses multiple backend servers for generation, if given.
+
+* [vid2vid_simple.py](examples/vid2vid_simple.py)
+
+  Basic video 2 video script using the [imageio](https://github.com/imageio/imageio) library.
+
+  Processes each frame of an input video using the Img2Img API, builds a new video as result.
 
 * [img2vid.py](examples/img2vid.py)
 
@@ -30,9 +43,3 @@ Example scripts:
   Similar to [img2img.py](examples/img2img.py) but creates a video file instead.
 
   Uses multiple backend servers for generation, if given.
-
-* [vid2vid_simple.py](examples/vid2vid_simple.py)
-
-  Basic video 2 video script using the [imageio](https://github.com/imageio/imageio) library.
-
-  Processes each frame of an input video using the Img2Img API, builds a new video as result.

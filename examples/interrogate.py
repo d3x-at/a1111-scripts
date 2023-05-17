@@ -23,22 +23,32 @@ session_timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
 queue = asyncio.Queue()
 
 
-async def worker(server_address, queue):
+async def worker(server_address):
+    '''one of these guys is run for each SERVERS entry'''
     async with ClientSession(server_address, timeout=session_timeout) as session:
         while True:
+            # get a filename from the queue
             filename = await queue.get()
             try:
+                # determine the output filename
                 output_filename = filename.with_suffix('.txt')
                 if await ospath.exists(output_filename):
                     raise ValueError("file already exists", output_filename)
 
+                # prepare the img2img payload
                 payload = await get_payload(filename)
+                # call the interrogate API
                 caption = await interrogate(payload, session)
-                await save_output(caption, output_filename)
+
+                # save the output to disk
+                async with open(output_filename, 'w', encoding='utf-8') as fp:
+                    await fp.write(caption)
+
             except RuntimeError:
                 logging.exception("error interrogating file: %s", filename)
             except Exception:
                 logging.exception("unexpected error")
+
             queue.task_done()
 
 
@@ -51,37 +61,27 @@ async def interrogate(payload: dict, session: ClientSession):
 
 
 async def get_payload(image_filename: Path):
+    '''build a payload from given image'''
+    # read image & convert to base64 encoded string
     async with open(image_filename, mode='rb') as fp:
         base64_image = base64.b64encode(await fp.read()).decode('utf-8')
 
+    # assemble payload
     return {
         "image": base64_image,
         "model": MODEL
     }
 
 
-async def save_output(caption: str, file_path: Path):
-    async with open(file_path, 'w', encoding='utf-8') as fp:
-        await fp.write(caption)
-
-
-def add_files(directory, glob_pattern):
-    dir_path = Path(directory)
-    if not dir_path.exists():
-        raise ValueError("directory does not exist")
-
-    for filename in dir_path.glob(glob_pattern):
-        queue.put_nowait(filename)
-
-
 async def run():
-    tasks = []
-    for server_address in SERVERS:
-        task = asyncio.create_task(worker(server_address, queue))
-        tasks.append(task)
+    # create worker tasks
+    tasks = [asyncio.create_task(worker(server_address))
+             for server_address in SERVERS]
 
+    # wait for all files to be processed
     await queue.join()
 
+    # shut down workers
     for task in tasks:
         task.cancel()
 
@@ -89,7 +89,13 @@ async def run():
 
 
 async def main(directory, glob_pattern):
-    add_files(directory, glob_pattern)
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        raise ValueError("directory does not exist")
+
+    for filename in dir_path.glob(glob_pattern):
+        queue.put_nowait(filename)
+
     await run()
 
 

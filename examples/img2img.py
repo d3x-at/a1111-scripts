@@ -30,23 +30,39 @@ session_timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
 queue = asyncio.Queue()
 parser = ParserManager()
 
+parse_images = True
+'''set to `False` to prevent the script from automatically populating the payload'''
 
-async def worker(server_address, queue):
+
+async def worker(server_address):
+    '''one of these guys is run for each SERVERS entry'''
     async with ClientSession(server_address, timeout=session_timeout) as session:
         while True:
+            # get a filename from the queue
             filename = await queue.get()
             try:
+                # determine the output filename
+                # attention: the API does return the file type set in the backend options
+                #   see txt2img.py for one approach of handling this situation
                 output_filename = filename.with_stem(filename.stem + "_img2img")
                 if await ospath.exists(output_filename):
                     raise ValueError("file already exists", output_filename)
 
+                # prepare the img2img payload
                 payload = await get_payload(filename)
+                # call the img2img API
                 images = await img2img(payload, session)
-                await save_output(images[0], output_filename)
+
+                # save the output to disk
+                image_bytes = base64.b64decode(images[0])
+                async with open(output_filename, 'wb') as fp:
+                    await fp.write(image_bytes)
+
             except RuntimeError:
                 logging.exception("error interrogating file: %s", filename)
             except Exception:
                 logging.exception("unexpected error")
+
             queue.task_done()
 
 
@@ -59,61 +75,68 @@ async def img2img(payload: dict, session: ClientSession):
 
 
 async def get_payload(image_filename: Path, custom_payload=PAYLOAD):
+    '''build a payload from a given image and a custom payload'''
+    # read image
     async with open(image_filename, mode='rb') as fp:
-        with BytesIO(await fp.read()) as buffered, Image.open(buffered) as image:
-            base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
-            image_parameters = parser.parse(image)
-            mime_type = image.get_format_mimetype()
-            payload = {
-                'height': image.height,
-                'width': image.width
-            }
+        image_bytes = await fp.read()
 
-    if image_parameters:
-        try:
-            prompt, negative_prompt = image_parameters.prompts[0]
-            if prompt:
-                payload['prompt'] = prompt.value
-            if negative_prompt:
-                payload['negative_prompt'] = negative_prompt.value
-        except KeyError:
-            logging.warning("no prompt found in %s", image_filename)
-        try:
-            sampler = image_parameters.samplers[0]
-            payload.update(sampler.parameters, sampler_index=sampler.name)
-        except KeyError:
-            logging.warning("no sampler found in %s", image_filename)
+    # get image parameters
+    with BytesIO(image_bytes) as buffered, Image.open(buffered) as image:
+        mime_type = image.get_format_mimetype()
+        image_parameters = get_image_params(image) or {}
+        image_parameters.update({
+            'height': image.height,
+            'width': image.width
+        })
+
+    # convert image to something we can POST to A1111
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
 
     return {
-        **payload,
+        **image_parameters,
         **custom_payload,
+        # The A1111 does not need a mime type for now. As we have it though, let's use it!
         "init_images": [f"data:{mime_type};base64,{base64_image}"]
     }
 
 
-async def save_output(base64_image: str, filename: Path):
-    image_bytes = base64.b64decode(base64_image)
-    async with open(filename, 'wb') as fp:
-        await fp.write(image_bytes)
+def get_image_params(image):
+    '''parse image generation parameters from the given image'''
+    if not parse_images:
+        return
 
+    image_parameters = parser.parse(image)
+    if not image_parameters:
+        return
 
-def add_files(directory, glob_pattern):
-    dir_path = Path(directory)
-    if not dir_path.exists():
-        raise ValueError("directory does not exist")
+    params = {}
+    try:
+        prompt, negative_prompt = image_parameters.prompts[0]
+        if prompt:
+            params['prompt'] = prompt.value
+        if negative_prompt:
+            params['negative_prompt'] = negative_prompt.value
+    except KeyError:
+        logging.warning("no prompt found")
 
-    for filename in dir_path.glob(glob_pattern):
-        queue.put_nowait(filename)
+    try:
+        sampler = image_parameters.samplers[0]
+        params.update(sampler.parameters, sampler_index=sampler.name)
+    except KeyError:
+        logging.warning("no sampler found")
+
+    return params
 
 
 async def run():
-    tasks = []
-    for server_address in SERVERS:
-        task = asyncio.create_task(worker(server_address, queue))
-        tasks.append(task)
+    # create worker tasks
+    tasks = [asyncio.create_task(worker(server_address))
+             for server_address in SERVERS]
 
+    # wait for all files to be processed
     await queue.join()
 
+    # shut down workers
     for task in tasks:
         task.cancel()
 
@@ -121,7 +144,13 @@ async def run():
 
 
 async def main(directory, glob_pattern):
-    add_files(directory, glob_pattern)
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        raise ValueError("directory does not exist")
+
+    for filename in dir_path.glob(glob_pattern):
+        queue.put_nowait(filename)
+
     await run()
 
 
