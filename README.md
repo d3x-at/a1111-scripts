@@ -25,6 +25,14 @@ Example scripts:
 
 * [img2vid.py](examples/img2vid.py)
 
-  Batch Image 2 Image 2 Video, similar to [img2img.py](examples/img2img.py) but creates a video file instead.
+  Batch Image 2 Image 2 Video using the [ffmpeg-python](https://github.com/kkroening/ffmpeg-python) library.
+  
+  Similar to [img2img.py](examples/img2img.py) but creates a video file instead.
 
   Uses multiple backend servers for generation, if given.
+
+* [vid2vid_simple.py](examples/vid2vid_simple.py)
+
+  Basic video 2 video script using the [imageio](https://github.com/imageio/imageio) library.
+
+  Processes each frame of an input video using the Img2Img API, builds a new video as result.

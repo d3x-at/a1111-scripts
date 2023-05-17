@@ -1,10 +1,16 @@
+# for everthing not _simple
 aiohttp
 aiofiles
-# for txt2img_simple
-requests
+
 # for img2img
-sd-parsers
-# for img2img and interrogate
 Pillow
+sd-parsers
+
 # for img2vid
 ffmpeg-python
+
+# for txt2img_simple & vid2vid_simple
+requests
+
+# for vid2vid_simple
+imageio[pyav]
