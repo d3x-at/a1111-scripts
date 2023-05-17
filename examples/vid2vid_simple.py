@@ -48,7 +48,7 @@ def img2img(frame):
 
 def main(input_file, output_file):
     # get fps from original video (default to 24 if not found)
-    fps = int(iio.immeta(input_file, plugin="pyav").get('fps', 24))
+    fps = round(iio.immeta(input_file, plugin="pyav").get('fps', 24))
 
     # open the output file for writing
     with iio.imopen(output_file, "w", plugin="pyav") as output:
