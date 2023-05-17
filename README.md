@@ -1,12 +1,12 @@
 Basic scripts to process loads of images using the A1111 API.
 
-* [txt2img_simple.py](examples/txt2img_simple.py), [txt2img_simple.js](examples/txt2img_simple.js)
+* [txt2img_simple.py](api/txt2img_simple.py), [txt2img_simple.js](api/txt2img_simple.js)
 
   Basic Text 2 Image examples.
   
   Request a single image generation.
 
-* [txt2img.py](examples/txt2img.py)
+* [txt2img.py](api/txt2img.py)
 
   Batch Text 2 Image example.
   
@@ -14,7 +14,7 @@ Basic scripts to process loads of images using the A1111 API.
   
   Uses multiple backend servers for generation, if given.
 
-* [interrogate.py](examples/interrogate.py)
+* [interrogate.py](api/interrogate.py)
 
   Batch Interrogation example.
 
@@ -22,7 +22,7 @@ Basic scripts to process loads of images using the A1111 API.
 
   Uses multiple backend servers for generation, if given.
 
-* [img2img.py](examples/img2img.py)
+* [img2img.py](api/img2img.py)
 
   Batch Image 2 Image example using the [sd-parsers](https://github.com/d3x-at/sd-parsers) library.
   
@@ -30,16 +30,16 @@ Basic scripts to process loads of images using the A1111 API.
   
   Uses multiple backend servers for generation, if given.
 
-* [vid2vid_simple.py](examples/vid2vid_simple.py)
+* [vid2vid_simple.py](api/vid2vid_simple.py)
 
   Basic video 2 video script using the [imageio](https://github.com/imageio/imageio) library.
 
   Processes each frame of an input video using the Img2Img API, builds a new video as result.
 
-* [img2vid.py](examples/img2vid.py)
+* [img2vid.py](api/img2vid.py)
 
   Batch Image 2 Image 2 Video using the [ffmpeg-python](https://github.com/kkroening/ffmpeg-python) library.
   
-  Similar to [img2img.py](examples/img2img.py) but creates a video file instead.
+  Similar to [img2img.py](api/img2img.py) but creates a video file instead.
 
   Uses multiple backend servers for generation, if given.
