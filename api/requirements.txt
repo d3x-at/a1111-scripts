@@ -14,3 +14,4 @@ requests
 
 # for vid2vid_simple
 imageio[pyav]
+numpy

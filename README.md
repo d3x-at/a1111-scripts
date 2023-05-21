@@ -36,6 +36,8 @@ Basic scripts to process loads of images using the A1111 API.
 
   Processes each frame of an input video using the Img2Img API, builds a new video as result.
 
+  Not too useful for the time being, use TemporalKit, EbSynth or similar to produce good-looking stuff.
+
 * [img2vid.py](api/img2vid.py)
 
   Batch Image 2 Image 2 Video using the [ffmpeg-python](https://github.com/kkroening/ffmpeg-python) library.

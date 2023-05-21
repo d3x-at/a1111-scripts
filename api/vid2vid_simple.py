@@ -6,6 +6,7 @@ add to or change PAYLOAD to change image generation parameters
 import base64
 import sys
 
+import numpy as np
 import imageio.v3 as iio
 import requests
 
@@ -16,6 +17,20 @@ PAYLOAD = {
     "steps": 20,
     "denoising_strength": 0.2
 }
+
+
+# Without using tools like TemporalKit or EbSynth,
+# SD will probably not provide the smoothest video out there.
+#
+# Have a new idea on how to make better video?
+# Here is where you might start.
+#
+# If you intend to use ffmpeg filtering, ffmpeg-python may be a better match.
+# See img2vid.py for basic ffmpeg filter usage.
+#
+def process(frame: np.ndarray) -> np.ndarray:
+    '''do some postprocessing'''
+    return frame
 
 
 def img2img(frame):
@@ -59,6 +74,8 @@ def main(input_file, output_file):
         for frame in iio.imiter(input_file, plugin="pyav"):
             # send to img2img
             frame = img2img(frame)
+            # add some custom magic
+            frame = process(frame)
             # add to output video
             output.write_frame(frame)
 
