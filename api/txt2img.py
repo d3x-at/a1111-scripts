@@ -1,6 +1,9 @@
+#!/usr/bin/env python3
 '''
-usage: python3 txt2img.py
+usage: python3 txt2img.py "a puppy dog"
+get help with: python3 txt2img.py -h
 '''
+import argparse
 import asyncio
 import base64
 import logging
@@ -10,7 +13,7 @@ from pathlib import Path
 from aiofiles import open, ospath
 from aiohttp import ClientSession, ClientTimeout
 
-OUTPUT_FOLDER = "tmp"
+OUTPUT_FOLDER = "."
 SERVERS = ["http://127.0.0.1:7860"]
 
 JPG_SIG = bytes.fromhex("ff d8 ff")
@@ -20,17 +23,26 @@ session_timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
 queue = asyncio.Queue()
 
 
-async def worker(server_address, queue):
+async def worker(server_address):
     async with ClientSession(server_address, timeout=session_timeout) as session:
         while True:
-            payload = await queue.get()
+            # get job id and payload from the queue
+            index, payload = await queue.get()
             try:
+                # request image generation, loop over resulting images
                 for base64_image in await txt2img(payload, session):
-                    await save_output(base64_image)
+                    image_bytes = base64.b64decode(base64_image)
+
+                    # save image to disk
+                    output_filename = await get_filename(image_bytes, index)
+                    async with open(output_filename, 'wb') as fp:
+                        await fp.write(image_bytes)
+
             except RuntimeError:
                 logging.exception("error generating image")
             except Exception:
                 logging.exception("unexpected error")
+
             queue.task_done()
 
 
@@ -42,15 +54,8 @@ async def txt2img(payload: dict, session: ClientSession):
     return result['images']
 
 
-async def save_output(base64_image: str):
-    image_bytes = base64.b64decode(base64_image)
-    output_filename = get_filename(image_bytes)
-    async with open(output_filename, 'wb') as fp:
-        await fp.write(image_bytes)
-
-
-async def get_filename(image_bytes: bytes):
-
+async def get_filename(image_bytes: bytes, index: int):
+    # determine image mime type
     if image_bytes.startswith(JPG_SIG):
         extension = ".jpg"
     elif image_bytes.startswith(PNG_SIG):
@@ -58,25 +63,27 @@ async def get_filename(image_bytes: bytes):
     else:
         raise RuntimeError("unknown file type")
 
+    # find a "free" filename
     output_folder = Path(OUTPUT_FOLDER)
+    filename = output_folder / f"{index:08d}{extension}"
+    if not await ospath.exists(filename):
+        return filename
+
     for i in count():
-        filename = output_folder / f"{i:08d}{extension}"
+        filename = output_folder / f"{index:08d}_{i:02d}{extension}"
         if not await ospath.exists(filename):
             return filename
 
 
-def add_prompt(**kwargs):
-    queue.put_nowait({**kwargs})
-
-
 async def run():
-    tasks = []
-    for server_address in SERVERS:
-        task = asyncio.create_task(worker(server_address, queue))
-        tasks.append(task)
+    # create worker tasks
+    tasks = [asyncio.create_task(worker(server_address))
+             for server_address in SERVERS]
 
+    # wait for all files to be processed
     await queue.join()
 
+    # shut down workers
     for task in tasks:
         task.cancel()
 
@@ -84,9 +91,31 @@ async def run():
 
 
 async def main():
-    add_prompt(prompt="puppy dog", negative_prompt="cats", steps=5, width=384)
+    # build command line argument parser
+    parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
+    parser.add_argument('prompt', type=str, help="prompt")
+    parser.add_argument('-n', '--negative', type=str, dest='negative_prompt', help="negative prompt")
+    parser.add_argument('-c', '--count', type=int, default=1, help="number of generated images")
+    parser.add_argument('-s', '--steps', type=int, default=20, help="generation steps")
+    parser.add_argument('--width', type=int, help="image width")
+    parser.add_argument('--height', type=int, help="image height")
+    parser.add_argument('--seed', type=int, help="seed")
+    parser.add_argument('--cfg', type=int, dest="cfg_scale", help="cfg scale")
+    parser.add_argument('--sampler', type=str, dest="sampler_name", help="sampler name")
+
+    # parse command arguments
+    args = parser.parse_args()
+
+    # build job queue
+    params = {k: v for k, v in vars(args).items() if k != 'count'}
+    for i in range(0, args.count):
+        queue.put_nowait((i, {**params}))
+
     await run()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as error:
+        print(str(error))

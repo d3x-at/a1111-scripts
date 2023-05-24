@@ -10,7 +10,7 @@ Basic scripts to process loads of images using the A1111 API.
 
   Batch Text 2 Image example.
   
-  Iterates over a number of given prompts.
+  Generates a number of images with a given prompt (and other parameters).
   
   Uses multiple backend servers for generation, if given.
 
