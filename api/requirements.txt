@@ -6,7 +6,7 @@ aiofiles
 Pillow
 sd-parsers
 
-# for img2vid
+# for img2vid, vid2vid_ffmpeg
 ffmpeg-python
 
 # for txt2img_simple, vid2vid_simple & webcam

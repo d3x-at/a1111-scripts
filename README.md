@@ -30,21 +30,29 @@ Basic scripts to process loads of images using the A1111 API.
   
   Uses multiple backend servers for generation, if given.
 
-* [vid2vid_simple.py](api/vid2vid_simple.py)
-
-  Basic video 2 video script using the [imageio](https://github.com/imageio/imageio) library.
-
-  Processes each frame of an input video using the Img2Img API, builds a new video as result.
-
-  Not too useful for the time being, use TemporalKit, EbSynth or similar to produce good-looking stuff.
-
 * [img2vid.py](api/img2vid.py)
 
   Batch Image 2 Image 2 Video using the [ffmpeg-python](https://github.com/kkroening/ffmpeg-python) library.
   
   Similar to [img2img.py](api/img2img.py) but creates a video file instead.
 
+  Allows the use of the built-in ffmpeg filters on the output video.
+
   Uses multiple backend servers for generation, if given.
+
+* [vid2vid_simple.py](api/vid2vid_simple.py)
+
+  Basic video 2 video script using the [imageio](https://github.com/imageio/imageio) library.
+
+  Processes each frame of an input video using the Img2Img API, builds a new video as result.
+
+* [vid2vid_ffmpeg.py](api/vid2vid_ffmpeg.py)
+
+  Basic video 2 video script using the [ffmpeg-python](https://github.com/kkroening/ffmpeg-python) library.
+
+  Allows the use of the built-in ffmpeg filters on the output video.
+
+  Processes each frame of an input video using the Img2Img API, builds a new video as result.
 
 * [webcam.py](api/webcam.py)
 
