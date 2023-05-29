@@ -45,3 +45,9 @@ Basic scripts to process loads of images using the A1111 API.
   Similar to [img2img.py](api/img2img.py) but creates a video file instead.
 
   Uses multiple backend servers for generation, if given.
+
+* [webcam.py](api/webcam.py)
+
+  Process live webcam footage using the [pygame](https://github.com/pygame/pygame) library.
+  
+  Grabs frames from a webcam and processes them using the Img2Img API, displays the resulting images.

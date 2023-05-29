@@ -9,9 +9,12 @@ sd-parsers
 # for img2vid
 ffmpeg-python
 
-# for txt2img_simple & vid2vid_simple
+# for txt2img_simple, vid2vid_simple & webcam
 requests
 
 # for vid2vid_simple
 imageio[pyav]
 numpy
+
+# for webcam
+pygame
