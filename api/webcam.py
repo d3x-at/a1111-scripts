@@ -78,7 +78,17 @@ class Game:
             'width': self.frame_width,
             'height': self.frame_height,
             **PAYLOAD,
-            "init_images": [base64_image]
+            'init_images': [base64_image],
+            'alwayson_scripts': {
+                'controlnet': {'args': [
+                    {
+                        "module": "canny",
+                        "model": "control_canny-fp16 [e3fe7712]",
+                        "control_mode": 2,
+                        "input_image": base64_image,
+                    }
+                ]}
+            }
         }
 
         # call img2img API
