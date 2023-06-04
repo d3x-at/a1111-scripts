@@ -1,5 +1,7 @@
 Basic scripts to process loads of images using the A1111 API.
 
+The scripts need one (or more) running instance(s) of the [Stable Diffusion WebUI](https://github.com/AUTOMATIC1111/stable-diffusion-webui) to connect to.
+
 * [txt2img_simple.py](api/txt2img_simple.py), [txt2img_simple.js](api/txt2img_simple.js)
 
   Basic Text 2 Image examples.
