@@ -1,4 +1,4 @@
-'''
+"""
 usage: python3 img2img.py <directory> <glob pattern>
 i.e.: python3 img2img.py images **/*.png
 
@@ -6,7 +6,7 @@ puts out <original_filename>_img2img.png next to the original file
 
 add more servers to SERVERS to process stuff in parallel
 add to or change PAYLOAD to change image generation parameters
-'''
+"""
 import asyncio
 import base64
 import logging
@@ -17,25 +17,22 @@ from pathlib import Path
 from aiofiles import open, ospath
 from aiohttp import ClientSession, ClientTimeout
 from PIL import Image
-from sdparsers import ParserManager
+from sd_parsers import ParserManager
 
 SERVERS = ["http://127.0.0.1:7860"]
 
-PAYLOAD = {
-    "steps": 5,
-    "denoising_strength": 0.2
-}
+PAYLOAD = {"steps": 5, "denoising_strength": 0.2}
 
 session_timeout = ClientTimeout(total=None, sock_connect=10, sock_read=600)
-queue = asyncio.Queue()
+queue: asyncio.Queue[Path] = asyncio.Queue()
 parser = ParserManager()
 
 parse_images = True
-'''set to `False` to prevent the script from automatically populating the payload'''
+"""set to `False` to prevent the script from automatically populating the payload"""
 
 
 async def worker(server_address):
-    '''one of these guys is run for each SERVERS entry'''
+    """one of these guys is run for each SERVERS entry"""
     async with ClientSession(server_address, timeout=session_timeout) as session:
         while True:
             # get a filename from the queue
@@ -55,7 +52,7 @@ async def worker(server_address):
 
                 # save the output to disk
                 image_bytes = base64.b64decode(images[0])
-                async with open(output_filename, 'wb') as fp:
+                async with open(output_filename, "wb") as fp:
                     await fp.write(image_bytes)
 
             except RuntimeError:
@@ -67,62 +64,58 @@ async def worker(server_address):
 
 
 async def img2img(payload: dict, session: ClientSession):
-    async with session.post('/sdapi/v1/img2img', json=payload) as response:
+    async with session.post("/sdapi/v1/img2img", json=payload) as response:
         if not response.ok:
             raise RuntimeError("error querying server", response.status, await response.text())
         result = await response.json()
-    return result['images']
+    return result["images"]
 
 
 async def get_payload(image_filename: Path, custom_payload=PAYLOAD):
-    '''build a payload from a given image and a custom payload'''
+    """build a payload from a given image and a custom payload"""
     # read image
-    async with open(image_filename, mode='rb') as fp:
+    async with open(image_filename, mode="rb") as fp:
         image_bytes = await fp.read()
 
     # get image parameters
     with BytesIO(image_bytes) as buffered, Image.open(buffered) as image:
-        mime_type = image.get_format_mimetype()
+        mime_type = Image.MIME[image.format]
         image_parameters = get_image_params(image) or {}
-        image_parameters.update({
-            'height': image.height,
-            'width': image.width
-        })
+        image_parameters.update({"height": image.height, "width": image.width})
 
     # convert image to something we can POST to A1111
-    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
     return {
         **image_parameters,
         **custom_payload,
         # The A1111 does not need a mime type for now. As we have it though, let's use it!
-        "init_images": [f"data:{mime_type};base64,{base64_image}"]
+        "init_images": [f"data:{mime_type};base64,{base64_image}"],
     }
 
 
 def get_image_params(image):
-    '''parse image generation parameters from the given image'''
+    """parse image generation parameters from the given image"""
     if not parse_images:
-        return
+        return None
 
     image_parameters = parser.parse(image)
     if not image_parameters:
-        return
+        return None
 
     params = {}
-    try:
-        prompt, negative_prompt = image_parameters.prompts[0]
-        if prompt:
-            params['prompt'] = prompt.value
-        if negative_prompt:
-            params['negative_prompt'] = negative_prompt.value
-    except KeyError:
-        logging.warning("no prompt found")
+    prompt = ", ".join(prompt.value for prompt in image_parameters.prompts)
+    if prompt:
+        params["prompt"] = prompt
+
+    negative_prompt = ", ".join(prompt.value for prompt in image_parameters.negative_prompts)
+    if negative_prompt:
+        params["negative_prompt"] = negative_prompt
 
     try:
-        sampler = image_parameters.samplers[0]
+        sampler = next(iter(image_parameters.samplers))
         params.update(sampler.parameters, sampler_index=sampler.name)
-    except KeyError:
+    except StopIteration:
         logging.warning("no sampler found")
 
     return params
@@ -130,8 +123,7 @@ def get_image_params(image):
 
 async def run():
     # create worker tasks
-    tasks = [asyncio.create_task(worker(server_address))
-             for server_address in SERVERS]
+    tasks = [asyncio.create_task(worker(server_address)) for server_address in SERVERS]
 
     # wait for all files to be processed
     await queue.join()
